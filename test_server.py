@@ -39,6 +39,22 @@ class ConversationTests(unittest.TestCase):
         self.assertTrue(mock.call_args_list[1].args[2])
         self.assertFalse(mock.call_args_list[2].args[2])
 
+    def test_patient_can_accept_booking_offer_without_sending_booking_to_model(self):
+        answers = ['cough', 'yes', '1', '1', 'yes', 'Another question', '/quit']
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as folder:
+            roster = Path(folder) / 'roster.csv'
+            roster.write_text('name,weekdays,start,end\nDr. Test,1|2|3|4|5|6|7,09:00,10:00\n',
+                              encoding='utf-8')
+            with patch('cli.interview_turn', return_value=reply()) as model, \
+                    patch('builtins.input', side_effect=answers), patch('sys.stdout', output):
+                cli.consultation(self.config, roster, Path(folder) / 'appointments.sqlite3')
+        self.assertIn('Would you like to book', output.getvalue())
+        self.assertIn('Appointment booked. Confirmation #1.', output.getvalue())
+        self.assertEqual(model.call_count, 2)
+        self.assertEqual([message['content'] for message in model.call_args.args[0]
+                          if message['role'] == 'user'], ['cough', 'Another question'])
+
     def test_urgent_advice_is_visible(self):
         output=io.StringIO()
         with patch('cli.interview_turn',return_value=reply(urgent=True)), patch('builtins.input',side_effect=['chest pain','/quit']), patch('sys.stdout',output):
